@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FO Device Tracker — Device</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif; max-width: 420px; margin: 40px auto;
+      padding: 0 16px; text-align: center;
+    }
+    input {
+      width: 100%; padding: 10px; font-size: 16px; margin: 8px 0;
+      box-sizing: border-box;
+    }
+    button {
+      width: 100%; padding: 12px; font-size: 16px; margin-top: 10px;
+      background: #2563eb; color: white; border: none; border-radius: 6px;
+    }
+    #status { margin-top: 16px; font-size: 14px; color: #444; }
+  </style>
+</head>
+<body>
+  <h2>Share Device Location</h2>
+  <p>Enter a name for this device, then start sharing. Keep this tab open while working.</p>
+
+  <input id="label" type="text" placeholder="e.g. FO - John, Router 3" />
+  <button id="startBtn">Start Sharing Location</button>
+  <div id="status"></div>
+
+  <script>
+    const deviceId = 'device_' + Math.random().toString(36).slice(2, 8);
+    const statusEl = document.getElementById('status');
+    let watchId = null;
+
+    document.getElementById('startBtn').addEventListener('click', () => {
+      const label = document.getElementById('label').value || deviceId;
+
+      if (!navigator.geolocation) {
+        statusEl.textContent = 'Geolocation is not supported on this browser.';
+        return;
+      }
+
+      watchId = navigator.geolocation.watchPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          sendLocation(latitude, longitude, label);
+        },
+        (err) => {
+          statusEl.textContent = 'Location error: ' + err.message;
+        },
+        { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
+      );
+
+      statusEl.textContent = 'Sharing started...';
+      document.getElementById('startBtn').disabled = true;
+    });
+
+    async function sendLocation(lat, lng, label) {
+      try {
+        await fetch('/api/location', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ deviceId, lat, lng, label })
+        });
+        statusEl.textContent = `Last sent: ${new Date().toLocaleTimeString()} (${lat.toFixed(5)}, ${lng.toFixed(5)})`;
+      } catch (err) {
+        statusEl.textContent = 'Failed to send location: ' + err.message;
+      }
+    }
+  </script>
+</body>
+</html>

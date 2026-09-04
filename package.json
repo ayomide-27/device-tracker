@@ -1,0 +1,15 @@
+{
+  "name": "device-tracker",
+  "version": "1.0.0",
+  "description": "Consent-based device location tracker for FO field visits",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.22.2"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

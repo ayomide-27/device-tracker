@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FO Device Tracker — Dashboard</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; }
+    #map { height: 100%; width: 100%; }
+    #status {
+      position: absolute; top: 10px; left: 50px; z-index: 1000;
+      background: white; padding: 6px 12px; border-radius: 6px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.3); font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <div id="status">Loading devices...</div>
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const map = L.map('map').setView([9.0765, 7.3986], 12); // default: Abuja
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    const markers = {}; // deviceId -> Leaflet marker
+    let firstLoad = true;
+
+    async function refreshDevices() {
+      try {
+        const res = await fetch('/api/devices');
+        const devices = await res.json();
+        const ids = Object.keys(devices);
+
+        document.getElementById('status').textContent =
+          ids.length === 0 ? 'No devices reporting yet' : `${ids.length} device(s) reporting`;
+
+        ids.forEach(id => {
+          const d = devices[id];
+          const popupText = `${d.label}<br>Updated: ${new Date(d.lastUpdate).toLocaleTimeString()}`;
+
+          if (markers[id]) {
+            markers[id].setLatLng([d.lat, d.lng]).setPopupContent(popupText);
+          } else {
+            markers[id] = L.marker([d.lat, d.lng]).addTo(map).bindPopup(popupText);
+          }
+        });
+
+        // Center map on first device the first time we get data
+        if (firstLoad && ids.length > 0) {
+          const first = devices[ids[0]];
+          map.setView([first.lat, first.lng], 14);
+          firstLoad = false;
+        }
+      } catch (err) {
+        document.getElementById('status').textContent = 'Error loading devices';
+        console.error(err);
+      }
+    }
+
+    refreshDevices();
+    setInterval(refreshDevices, 5000); // poll every 5s
+  </script>
+</body>
+</html>
