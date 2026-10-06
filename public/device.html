@@ -5,39 +5,74 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>FO Device Tracker — Device</title>
   <style>
+    * { box-sizing: border-box; }
     body {
-      font-family: system-ui, sans-serif; max-width: 420px; margin: 40px auto;
-      padding: 0 16px; text-align: center;
+      font-family: system-ui, sans-serif; margin: 0; min-height: 100vh;
+      display: flex; align-items: center; justify-content: center;
+      background: #f3f4f6; padding: 20px;
     }
+    .card {
+      background: white; max-width: 380px; width: 100%;
+      border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+      padding: 28px 24px; text-align: center;
+    }
+    h2 { margin: 0 0 6px; color: #111; }
+    p.sub { color: #666; font-size: 13px; margin: 0 0 20px; line-height: 1.5; }
+
     input {
-      width: 100%; padding: 10px; font-size: 16px; margin: 8px 0;
-      box-sizing: border-box;
+      width: 100%; padding: 12px; font-size: 15px; margin-bottom: 12px;
+      border: 1px solid #ddd; border-radius: 8px;
     }
+    input:focus { outline: none; border-color: #2563eb; }
+
     button {
-      width: 100%; padding: 12px; font-size: 16px; margin-top: 10px;
-      background: #2563eb; color: white; border: none; border-radius: 6px;
+      width: 100%; padding: 13px; font-size: 15px; font-weight: 600;
+      background: #2563eb; color: white; border: none; border-radius: 8px;
+      cursor: pointer;
     }
-    #status { margin-top: 16px; font-size: 14px; color: #444; }
+    button:disabled { background: #93b4ef; cursor: default; }
+
+    #status {
+      margin-top: 18px; font-size: 13px; color: #444;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      min-height: 18px;
+    }
+    .dot {
+      width: 8px; height: 8px; border-radius: 50%; background: #ccc;
+      display: inline-block;
+    }
+    .dot.live { background: #22c55e; animation: pulse 1.5s infinite; }
+    .dot.error { background: #ef4444; }
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(34,197,94,0.5); }
+      100% { box-shadow: 0 0 0 8px rgba(34,197,94,0); }
+    }
   </style>
 </head>
 <body>
-  <h2>Share Device Location</h2>
-  <p>Enter a name for this device, then start sharing. Keep this tab open while working.</p>
+  <div class="card">
+    <h2>Share Device Location</h2>
+    <p class="sub">Enter a name for this device, then start sharing.<br>Keep this tab open while working.</p>
 
-  <input id="label" type="text" placeholder="e.g. FO - John, Router 3" />
-  <button id="startBtn">Start Sharing Location</button>
-  <div id="status"></div>
+    <input id="label" type="text" placeholder="e.g. FO - John, Router 3" />
+    <button id="startBtn">Start Sharing Location</button>
+    <div id="status"></div>
+  </div>
 
   <script>
     const deviceId = 'device_' + Math.random().toString(36).slice(2, 8);
     const statusEl = document.getElementById('status');
     let watchId = null;
 
+    function setStatus(text, dotClass) {
+      statusEl.innerHTML = `<span class="dot ${dotClass || ''}"></span><span>${text}</span>`;
+    }
+
     document.getElementById('startBtn').addEventListener('click', () => {
       const label = document.getElementById('label').value || deviceId;
 
       if (!navigator.geolocation) {
-        statusEl.textContent = 'Geolocation is not supported on this browser.';
+        setStatus('Geolocation is not supported on this browser.', 'error');
         return;
       }
 
@@ -46,13 +81,11 @@
           const { latitude, longitude } = position.coords;
           sendLocation(latitude, longitude, label);
         },
-        (err) => {
-          statusEl.textContent = 'Location error: ' + err.message;
-        },
+        (err) => setStatus('Location error: ' + err.message, 'error'),
         { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
       );
 
-      statusEl.textContent = 'Sharing started...';
+      setStatus('Starting...', 'live');
       document.getElementById('startBtn').disabled = true;
     });
 
@@ -63,9 +96,9 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ deviceId, lat, lng, label })
         });
-        statusEl.textContent = `Last sent: ${new Date().toLocaleTimeString()} (${lat.toFixed(5)}, ${lng.toFixed(5)})`;
+        setStatus(`Live — last sent ${new Date().toLocaleTimeString()}`, 'live');
       } catch (err) {
-        statusEl.textContent = 'Failed to send location: ' + err.message;
+        setStatus('Failed to send: ' + err.message, 'error');
       }
     }
   </script>

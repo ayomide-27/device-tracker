@@ -8,15 +8,39 @@
   <style>
     html, body { margin: 0; height: 100%; font-family: system-ui, sans-serif; }
     #map { height: 100%; width: 100%; }
-    #status {
-      position: absolute; top: 10px; left: 50px; z-index: 1000;
-      background: white; padding: 6px 12px; border-radius: 6px;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.3); font-size: 13px;
+
+    #panel {
+      position: absolute; top: 10px; left: 10px; z-index: 1000;
+      background: white; border-radius: 8px; width: 240px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.25); overflow: hidden;
     }
+    #panel-header {
+      background: #2563eb; color: white; padding: 10px 14px;
+      font-size: 14px; font-weight: 600;
+    }
+    #device-list { max-height: 60vh; overflow-y: auto; }
+    .device-row {
+      padding: 10px 14px; border-bottom: 1px solid #eee; cursor: pointer;
+      font-size: 13px;
+    }
+    .device-row:hover { background: #f5f7fb; }
+    .device-row .name { font-weight: 600; color: #111; }
+    .device-row .time { color: #777; font-size: 12px; margin-top: 2px; }
+    .empty-msg { padding: 14px; font-size: 13px; color: #888; }
+
+    .device-label {
+      background: #2563eb; color: white; padding: 2px 8px;
+      border-radius: 4px; font-size: 12px; font-weight: 600;
+      white-space: nowrap; border: none; box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+    .device-label::before { display: none; } /* hide default tooltip arrow */
   </style>
 </head>
 <body>
-  <div id="status">Loading devices...</div>
+  <div id="panel">
+    <div id="panel-header">Tracked Devices</div>
+    <div id="device-list"><div class="empty-msg">Loading...</div></div>
+  </div>
   <div id="map"></div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -26,8 +50,36 @@
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
 
-    const markers = {}; // deviceId -> Leaflet marker
+    const markers = {};   // deviceId -> Leaflet marker
+    const trails = {};    // deviceId -> Leaflet polyline
     let firstLoad = true;
+
+    function renderDeviceList(devices) {
+      const listEl = document.getElementById('device-list');
+      const ids = Object.keys(devices);
+
+      if (ids.length === 0) {
+        listEl.innerHTML = '<div class="empty-msg">No devices reporting yet</div>';
+        return;
+      }
+
+      listEl.innerHTML = ids.map(id => {
+        const d = devices[id];
+        const time = new Date(d.lastUpdate).toLocaleTimeString();
+        return `<div class="device-row" data-id="${id}">
+                  <div class="name">${d.label}</div>
+                  <div class="time">Updated ${time}</div>
+                </div>`;
+      }).join('');
+
+      // Clicking a device in the list pans the map to it
+      listEl.querySelectorAll('.device-row').forEach(row => {
+        row.addEventListener('click', () => {
+          const id = row.dataset.id;
+          if (markers[id]) map.setView(markers[id].getLatLng(), 16);
+        });
+      });
+    }
 
     async function refreshDevices() {
       try {
@@ -35,28 +87,34 @@
         const devices = await res.json();
         const ids = Object.keys(devices);
 
-        document.getElementById('status').textContent =
-          ids.length === 0 ? 'No devices reporting yet' : `${ids.length} device(s) reporting`;
+        renderDeviceList(devices);
 
         ids.forEach(id => {
           const d = devices[id];
-          const popupText = `${d.label}<br>Updated: ${new Date(d.lastUpdate).toLocaleTimeString()}`;
 
+          // Marker + always-visible name label (no click needed)
           if (markers[id]) {
-            markers[id].setLatLng([d.lat, d.lng]).setPopupContent(popupText);
+            markers[id].setLatLng([d.lat, d.lng]);
           } else {
-            markers[id] = L.marker([d.lat, d.lng]).addTo(map).bindPopup(popupText);
+            markers[id] = L.marker([d.lat, d.lng]).addTo(map)
+              .bindTooltip(d.label, { permanent: true, direction: 'top', className: 'device-label', offset: [0, -10] });
+          }
+
+          // Movement trail from history
+          const points = (d.history || []).map(p => [p.lat, p.lng]);
+          if (trails[id]) {
+            trails[id].setLatLngs(points);
+          } else if (points.length > 1) {
+            trails[id] = L.polyline(points, { color: '#2563eb', weight: 3, opacity: 0.6 }).addTo(map);
           }
         });
 
-        // Center map on first device the first time we get data
         if (firstLoad && ids.length > 0) {
           const first = devices[ids[0]];
           map.setView([first.lat, first.lng], 14);
           firstLoad = false;
         }
       } catch (err) {
-        document.getElementById('status').textContent = 'Error loading devices';
         console.error(err);
       }
     }
