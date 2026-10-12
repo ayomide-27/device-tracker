@@ -50,6 +50,15 @@ async function openDatabase() {
     };
   }
 
+  // The built-in test database needs ~500-700 MB of memory. Hosts like Render's free plan
+  // allow 512 MB, so loading it there crashes the server. Refuse, and say what to do.
+  if (process.env.RENDER) {
+    throw new Error(
+      'DATABASE_URL is not set. On Render: open your service > Environment > add DATABASE_URL ' +
+      '(your Neon connection string), then redeploy.'
+    );
+  }
+
   const { PGlite } = await import('@electric-sql/pglite');
   const dir = process.env.LOCAL_DB_DIR || path.join(__dirname, 'data', 'pgdata');
   fs.mkdirSync(path.dirname(dir), { recursive: true });
