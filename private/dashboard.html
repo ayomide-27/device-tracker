@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FO Device Tracker</title>
+  <link rel="stylesheet" href="/vendor/leaflet/leaflet.css" />
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #111; }
+
+    /* Sidebar on the left, map fills the rest. Because they are separate columns,
+       the map's zoom buttons can never sit on top of the device list. */
+    #app { display: grid; grid-template-columns: 340px minmax(0, 1fr); height: 100vh; height: 100dvh; }
+    #sidebar { overflow-y: auto; background: #fff; border-right: 1px solid #e5e7eb; }
+    #map { min-height: 0; height: 100%; width: 100%; }
+    @media (max-width: 760px) {
+      #app { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) 48%; }
+      #map { order: -1; }
+      #sidebar { border-right: none; border-top: 1px solid #e5e7eb; }
+    }
+
+    header { background: #2563eb; color: #fff; padding: 14px 16px; }
+    header h1 { margin: 0; font-size: 17px; }
+    #summary { margin-top: 2px; font-size: 13px; opacity: 0.9; }
+    section { padding: 14px 16px; border-bottom: 1px solid #f0f0f0; }
+    h2 { margin: 0 0 10px; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: #6b7280; }
+
+    .banner { margin: 10px 16px 0; padding: 9px 11px; border-radius: 8px; font-size: 12.5px; line-height: 1.45; }
+    .banner.warn { background: #fef3c7; color: #78350f; }
+    .banner.danger { background: #fee2e2; color: #7f1d1d; }
+
+    .device { display: flex; align-items: flex-start; gap: 10px; padding: 9px 10px; margin: 0 -10px; border-radius: 8px; cursor: pointer; }
+    .device:hover { background: #f5f7fb; }
+    .device.selected { background: #e8efff; }
+    .status-dot { width: 11px; height: 11px; margin-top: 4px; border-radius: 50%; background: #9ca3af; flex: none; border: 2px solid #fff; box-shadow: 0 0 0 1px #d1d5db; }
+    .status-dot.online { background: #16a34a; box-shadow: 0 0 0 1px #16a34a; }
+    .device .info { flex: 1; min-width: 0; }
+    .device .name { font-weight: 600; font-size: 14px; overflow-wrap: anywhere; }
+    .device .meta { font-size: 12px; color: #6b7280; margin-top: 1px; }
+    .device .meta.offline { color: #b45309; }
+    .remove { border: none; background: none; color: #9ca3af; font-size: 18px; line-height: 1; cursor: pointer; padding: 0 4px; }
+    .remove:hover { color: #dc2626; }
+    .empty { font-size: 13px; color: #6b7280; line-height: 1.5; }
+
+    label { display: block; margin: 10px 0 4px; font-size: 12px; font-weight: 600; color: #374151; }
+    select, input[type="date"] { width: 100%; padding: 9px; font-size: 14px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; }
+    .chips { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+    button.chip, button.plain {
+      padding: 7px 11px; font-size: 13px; border: 1px solid #d1d5db; border-radius: 999px; background: #fff; cursor: pointer;
+    }
+    button.chip.active { background: #2563eb; border-color: #2563eb; color: #fff; }
+    button.plain { margin-top: 10px; border-radius: 8px; }
+    #routeSummary { margin-top: 12px; font-size: 13px; line-height: 1.5; }
+    #routeSummary strong { display: block; }
+    .legend { margin-top: 8px; font-size: 11.5px; color: #6b7280; line-height: 1.6; }
+    .swatch { display: inline-block; width: 18px; height: 0; vertical-align: middle; margin-right: 4px; border-top: 4px solid #2563eb; }
+    .swatch.dashed { border-top: 3px dashed #9ca3af; }
+
+    .leaflet-tooltip.device-label {
+      background: #fff; border: 1px solid #d1d5db; border-radius: 6px; padding: 2px 8px;
+      font-size: 12px; font-weight: 600; color: #111; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+    }
+    .leaflet-tooltip-top.device-label::before { border-top-color: #fff; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <aside id="sidebar">
+      <header>
+        <h1>FO Device Tracker</h1>
+        <div id="summary">Loading…</div>
+      </header>
+      <div id="banners"></div>
+
+      <section>
+        <h2>Devices</h2>
+        <div id="deviceList"></div>
+      </section>
+
+      <section>
+        <h2>Route history</h2>
+        <label for="routeDevice">Device</label>
+        <select id="routeDevice"></select>
+        <div class="chips">
+          <button type="button" class="chip" data-range="today">Today</button>
+          <button type="button" class="chip" data-range="yesterday">Yesterday</button>
+          <button type="button" class="chip" data-range="week">Last 7 days</button>
+        </div>
+        <label for="routeDate">Or pick a day</label>
+        <input type="date" id="routeDate" />
+        <div id="routeSummary">Pick a device, then a day, to see where it has been.</div>
+        <div class="legend">
+          <span class="swatch"></span>recorded route &nbsp;
+          <span class="swatch dashed"></span>no readings for 5+ min
+        </div>
+        <button type="button" class="plain" id="clearRoute">Hide route</button>
+      </section>
+    </aside>
+    <div id="map"></div>
+  </div>
+
+  <script src="/vendor/leaflet/leaflet.js"></script>
+  <script>
+    (() => {
+      'use strict';
+
+      const POLL_MS = 5000;             // how often the device list refreshes
+      const ROUTE_REFRESH_MS = 15000;   // how often a "live" route (today / last 7 days) refreshes
+      const GAP_MS = 5 * 60 * 1000;     // a pause longer than this is drawn as a dashed line
+
+      const $ = (id) => document.getElementById(id);
+
+      // ---------- Map ----------
+      const map = L.map('map', { zoomControl: false }).setView([9.0765, 7.3986], 12); // Abuja
+      L.control.zoom({ position: 'topright' }).addTo(map);
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      }).addTo(map);
+      const routeLayer = L.layerGroup().addTo(map);
+      window.addEventListener('resize', () => map.invalidateSize());
+
+      // ---------- State ----------
+      let devices = [];
+      let fetchedAt = 0;
+      let health = {};
+      let selectedId = null;
+      let route = null;          // { deviceId, kind: 'today'|'yesterday'|'week'|'date', date: 'YYYY-MM-DD' }
+      let didFitDevices = false;
+      const markers = new Map(); // deviceId -> circle marker
+
+      // ---------- Helpers ----------
+      async function api(path, options) {
+        const response = await fetch(path, options);
+        if (response.status === 401) {
+          setBanner('login', 'danger', 'Your login expired. Reload the page to sign in again.');
+          throw new Error('401');
+        }
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        return response.json();
+      }
+
+      function setBanner(key, kind, text) {
+        let el = document.querySelector(`[data-banner="${key}"]`);
+        if (!el) {
+          el = document.createElement('div');
+          el.dataset.banner = key;
+          $('banners').appendChild(el);
+        }
+        el.className = 'banner ' + kind;
+        el.textContent = text;
+      }
+      function clearBanner(key) {
+        const el = document.querySelector(`[data-banner="${key}"]`);
+        if (el) el.remove();
+      }
+
+      const clock = (ms) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      const dayTime = (ms) => new Date(ms).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+
+      function ago(seconds) {
+        const s = Math.max(0, Math.round(seconds));
+        if (s < 5) return 'just now';
+        if (s < 60) return `${s} s ago`;
+        if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+        if (s < 86400) return `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min ago`;
+        return `${Math.floor(s / 86400)} d ago`;
+      }
+      const ageNow = (d) => d.ageSeconds + (Date.now() - fetchedAt) / 1000;
+
+      function metres(a, b) {
+        const R = 6371000, rad = Math.PI / 180;
+        const dLat = (b.lat - a.lat) * rad, dLng = (b.lng - a.lng) * rad;
+        const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2;
+        return 2 * R * Math.asin(Math.sqrt(h));
+      }
+
+      // ---------- Device list ----------
+      function renderList() {
+        const online = devices.filter((d) => d.online).length;
+        $('summary').textContent = devices.length
+          ? `${online} online · ${devices.length - online} offline`
+          : 'No devices yet';
+
+        const list = $('deviceList');
+        list.textContent = '';
+        if (devices.length === 0) {
+          const empty = document.createElement('div');
+          empty.className = 'empty';
+          empty.textContent = `No devices yet. On a phone, open ${location.origin}/device.html and tap "Start sharing".`;
+          list.appendChild(empty);
+          return;
+        }
+
+        const sorted = [...devices].sort((a, b) => Number(b.online) - Number(a.online) || a.label.localeCompare(b.label));
+        for (const d of sorted) {
+          const row = document.createElement('div');
+          row.className = 'device' + (d.deviceId === selectedId ? ' selected' : '');
+          row.dataset.id = d.deviceId;
+
+          const dot = document.createElement('span');
+          dot.className = 'status-dot' + (d.online ? ' online' : '');
+
+          const info = document.createElement('div');
+          info.className = 'info';
+          const name = document.createElement('div');
+          name.className = 'name';
+          name.textContent = d.label;
+          const meta = document.createElement('div');
+          meta.className = 'meta' + (d.online ? '' : ' offline');
+          const age = ageNow(d);
+          let text = d.online ? `Online · updated ${ago(age)}` : `Offline · last seen ${ago(age)}`;
+          if (d.lastFixAt) text += ` · last position ${clock(new Date(d.lastFixAt).getTime())}`;
+          else text += ' · no GPS reading yet';
+          meta.textContent = text;
+          info.append(name, meta);
+          row.append(dot, info);
+
+          if (health.dashboardProtected) {
+            const remove = document.createElement('button');
+            remove.type = 'button';
+            remove.className = 'remove';
+            remove.title = 'Remove this device and its history';
+            remove.textContent = '×';
+            row.appendChild(remove);
+          }
+          list.appendChild(row);
+        }
+      }
+
+      $('deviceList').addEventListener('click', async (event) => {
+        const row = event.target.closest('.device');
+        if (!row) return;
+        const id = row.dataset.id;
+        if (event.target.closest('.remove')) {
+          const d = devices.find((x) => x.deviceId === id);
+          if (!confirm(`Remove "${d ? d.label : id}" and ALL of its saved route history? This cannot be undone.`)) return;
+          try {
+            await api('/api/devices/' + encodeURIComponent(id), { method: 'DELETE' });
+            if (selectedId === id) { selectedId = null; hideRoute(); }
+            refreshDevices();
+          } catch { setBanner('remove', 'danger', 'Could not remove the device.'); }
+          return;
+        }
+        selectDevice(id);
+      });
+
+      // ---------- Markers ----------
+      function tooltipFor(d) {
+        const el = document.createElement('span');
+        el.textContent = d.online ? d.label : `${d.label} · offline`;
+        return el;
+      }
+
+      function updateMarkers() {
+        const live = new Set();
+        for (const d of devices) {
+          if (d.lat === null || d.lng === null) continue;
+          live.add(d.deviceId);
+          const color = d.online ? '#16a34a' : '#6b7280';
+          let marker = markers.get(d.deviceId);
+          if (!marker) {
+            marker = L.circleMarker([d.lat, d.lng], { radius: 9, color: '#fff', weight: 2.5, fillColor: color, fillOpacity: 1 }).addTo(map);
+            marker.bindTooltip(tooltipFor(d), { permanent: true, direction: 'top', offset: [0, -10], className: 'device-label' });
+            marker.on('click', () => selectDevice(d.deviceId));
+            markers.set(d.deviceId, marker);
+          } else {
+            marker.setLatLng([d.lat, d.lng]);
+            marker.setStyle({ fillColor: color });
+            marker.setTooltipContent(tooltipFor(d));
+          }
+        }
+        for (const [id, marker] of markers) {
+          if (!live.has(id)) { marker.remove(); markers.delete(id); }
+        }
+        if (!didFitDevices && markers.size > 0) {
+          const points = [...markers.values()].map((m) => m.getLatLng());
+          if (points.length === 1) map.setView(points[0], 15);
+          else map.fitBounds(L.latLngBounds(points), { padding: [60, 60], maxZoom: 16 });
+          didFitDevices = true;
+        }
+      }
+
+      function fillRouteSelect() {
+        const select = $('routeDevice');
+        const previous = select.value;
+        select.textContent = '';
+        const first = document.createElement('option');
+        first.value = ''; first.textContent = 'Choose a device…';
+        select.appendChild(first);
+        for (const d of devices) {
+          const option = document.createElement('option');
+          option.value = d.deviceId; option.textContent = d.label;
+          select.appendChild(option);
+        }
+        select.value = selectedId || previous || '';
+      }
+
+      async function refreshDevices() {
+        try {
+          const data = await api('/api/devices');
+          devices = data.devices;
+          fetchedAt = Date.now();
+          clearBanner('conn');
+          renderList();
+          updateMarkers();
+          fillRouteSelect();
+        } catch (err) {
+          if (String(err.message) !== '401') setBanner('conn', 'warn', "Can't reach the server. Retrying…");
+        }
+      }
+
+      // ---------- Selecting a device & route history ----------
+      function selectDevice(id) {
+        selectedId = id;
+        $('routeDevice').value = id || '';
+        renderList();
+        const marker = markers.get(id);
+        if (marker) map.setView(marker.getLatLng(), Math.max(map.getZoom(), 15));
+        if (id) showRoute({ deviceId: id, kind: 'today' }, true);
+        else hideRoute();
+      }
+
+      function rangeFor(r) {
+        const now = new Date();
+        const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const shift = (days) => new Date(midnight.getFullYear(), midnight.getMonth(), midnight.getDate() + days);
+        if (r.kind === 'today') return { from: midnight, to: shift(1), label: 'today' };
+        if (r.kind === 'yesterday') return { from: shift(-1), to: midnight, label: 'yesterday' };
+        if (r.kind === 'week') return { from: shift(-6), to: shift(1), label: 'the last 7 days' };
+        const [y, m, d] = r.date.split('-').map(Number);
+        return { from: new Date(y, m - 1, d), to: new Date(y, m - 1, d + 1), label: new Date(y, m - 1, d).toLocaleDateString([], { day: 'numeric', month: 'long', year: 'numeric' }) };
+      }
+      const isLive = (r) => rangeFor(r).to > new Date();
+
+      function markActive() {
+        document.querySelectorAll('.chip').forEach((c) => c.classList.toggle('active', !!route && route.kind === c.dataset.range));
+        $('routeDate').value = route && route.kind === 'date' ? route.date : '';
+      }
+
+      async function showRoute(r, fit = true) {
+        route = r;
+        markActive();
+        await loadRoute(fit);
+      }
+
+      function hideRoute() {
+        route = null;
+        routeLayer.clearLayers();
+        markActive();
+        $('routeSummary').textContent = 'Pick a device, then a day, to see where it has been.';
+      }
+
+      async function loadRoute(fit) {
+        if (!route) return;
+        const { from, to, label } = rangeFor(route);
+        const device = devices.find((d) => d.deviceId === route.deviceId);
+        const name = device ? device.label : 'Device';
+        try {
+          const data = await api(`/api/route?deviceId=${encodeURIComponent(route.deviceId)}&from=${from.toISOString()}&to=${to.toISOString()}`);
+          if (!route || route.deviceId !== data.deviceId) return; // user moved on while we waited
+          drawRoute(data, name, label, to - from > 86400000 * 1.5, fit);
+        } catch (err) {
+          if (String(err.message) !== '401') $('routeSummary').textContent = 'Could not load the route.';
+        }
+      }
+
+      function drawRoute(data, name, periodLabel, multiDay, fit) {
+        routeLayer.clearLayers();
+        const summary = $('routeSummary');
+        summary.textContent = '';
+        const title = document.createElement('strong');
+        title.textContent = `${name} · ${periodLabel}`;
+        summary.appendChild(title);
+
+        const pts = data.points;
+        if (pts.length === 0) {
+          summary.appendChild(document.createTextNode('No readings were recorded in this period.'));
+          return;
+        }
+
+        const ll = (p) => [p.lat, p.lng];
+        const segments = [];
+        const gaps = [];
+        let current = [pts[0]];
+        for (let i = 1; i < pts.length; i++) {
+          if (pts[i].t - pts[i - 1].t > GAP_MS) {
+            segments.push(current);
+            gaps.push([pts[i - 1], pts[i]]);
+            current = [];
+          }
+          current.push(pts[i]);
+        }
+        segments.push(current);
+
+        let km = 0;
+        for (const seg of segments) {
+          for (let i = 1; i < seg.length; i++) km += metres(seg[i - 1], seg[i]) / 1000;
+          if (seg.length > 1) L.polyline(seg.map(ll), { color: '#2563eb', weight: 4, opacity: 0.85 }).addTo(routeLayer);
+        }
+        for (const [a, b] of gaps) {
+          L.polyline([ll(a), ll(b)], { color: '#9ca3af', weight: 3, dashArray: '6 8' }).addTo(routeLayer);
+        }
+
+        const when = multiDay ? dayTime : clock;
+        const first = pts[0], last = pts[pts.length - 1];
+        L.circleMarker(ll(first), { radius: 7, color: '#fff', weight: 2, fillColor: '#16a34a', fillOpacity: 1 })
+          .bindTooltip(`Start ${when(first.t)}`).addTo(routeLayer);
+        L.circleMarker(ll(last), { radius: 7, color: '#fff', weight: 2, fillColor: '#dc2626', fillOpacity: 1 })
+          .bindTooltip(`Latest ${when(last.t)}`).addTo(routeLayer);
+
+        const line = document.createElement('div');
+        let text = `${data.total} readings · about ${km.toFixed(1)} km · ${when(first.t)} to ${when(last.t)}`;
+        if (data.shown < data.total) text += ` (showing ${data.shown} of ${data.total})`;
+        if (gaps.length) text += ` · ${gaps.length} gap${gaps.length === 1 ? '' : 's'} with no readings`;
+        line.textContent = text;
+        summary.appendChild(line);
+
+        if (fit) map.fitBounds(L.latLngBounds(pts.map(ll)), { padding: [50, 50], maxZoom: 17 });
+      }
+
+      // ---------- Controls ----------
+      $('routeDevice').addEventListener('change', (e) => {
+        if (e.target.value) selectDevice(e.target.value);
+        else { selectedId = null; renderList(); hideRoute(); }
+      });
+      document.querySelectorAll('.chip').forEach((chip) => chip.addEventListener('click', () => {
+        const id = $('routeDevice').value;
+        if (!id) { $('routeSummary').textContent = 'Choose a device first.'; return; }
+        selectedId = id; renderList();
+        showRoute({ deviceId: id, kind: chip.dataset.range }, true);
+      }));
+      $('routeDate').max = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD in local time
+      $('routeDate').addEventListener('change', (e) => {
+        const id = $('routeDevice').value;
+        if (!id) { $('routeSummary').textContent = 'Choose a device first.'; e.target.value = ''; return; }
+        if (!e.target.value) return;
+        selectedId = id; renderList();
+        showRoute({ deviceId: id, kind: 'date', date: e.target.value }, true);
+      });
+      $('clearRoute').addEventListener('click', hideRoute);
+
+      // ---------- Start ----------
+      (async () => {
+        try {
+          health = await (await fetch('/api/health')).json();
+          if (health.storage === 'temporary') {
+            setBanner('storage', 'warn', 'Temporary storage: saved routes are erased whenever the server restarts. Connect a database (see README) to keep history.');
+          }
+          if (!health.dashboardProtected) {
+            setBanner('auth', 'danger', 'No dashboard password is set: anyone with this link can see device locations. Set DASHBOARD_PASSWORD on the server.');
+          }
+        } catch { /* the device poll below will show a connection banner */ }
+        await refreshDevices();
+        setInterval(refreshDevices, POLL_MS);
+        setInterval(() => { if (route && isLive(route)) loadRoute(false); }, ROUTE_REFRESH_MS);
+      })();
+    })();
+  </script>
+</body>
+</html>

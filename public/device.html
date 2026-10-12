@@ -3,104 +3,369 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>FO Device Tracker — Device</title>
+  <meta name="theme-color" content="#2563eb" />
+  <title>Share my location</title>
   <style>
     * { box-sizing: border-box; }
     body {
-      font-family: system-ui, sans-serif; margin: 0; min-height: 100vh;
+      margin: 0; min-height: 100vh; padding: 20px; background: #f3f4f6; color: #111;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
       display: flex; align-items: center; justify-content: center;
-      background: #f3f4f6; padding: 20px;
     }
     .card {
-      background: white; max-width: 380px; width: 100%;
-      border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.1);
-      padding: 28px 24px; text-align: center;
+      width: 100%; max-width: 400px; background: #fff; border-radius: 14px;
+      box-shadow: 0 4px 18px rgba(0, 0, 0, 0.1); padding: 26px 22px;
     }
-    h2 { margin: 0 0 6px; color: #111; }
-    p.sub { color: #666; font-size: 13px; margin: 0 0 20px; line-height: 1.5; }
-
+    h1 { margin: 0 0 6px; font-size: 22px; }
+    .sub { margin: 0 0 18px; color: #555; font-size: 13px; line-height: 1.5; }
+    label { display: block; margin: 12px 0 4px; font-size: 13px; font-weight: 600; color: #333; }
     input {
-      width: 100%; padding: 12px; font-size: 15px; margin-bottom: 12px;
-      border: 1px solid #ddd; border-radius: 8px;
+      width: 100%; padding: 12px; font-size: 16px; border: 1px solid #d1d5db; border-radius: 8px;
     }
-    input:focus { outline: none; border-color: #2563eb; }
-
+    input:focus { outline: 2px solid #93b4ef; border-color: #2563eb; }
     button {
-      width: 100%; padding: 13px; font-size: 15px; font-weight: 600;
-      background: #2563eb; color: white; border: none; border-radius: 8px;
-      cursor: pointer;
+      width: 100%; margin-top: 16px; padding: 13px; font-size: 16px; font-weight: 600;
+      border: none; border-radius: 8px; background: #2563eb; color: #fff; cursor: pointer;
     }
-    button:disabled { background: #93b4ef; cursor: default; }
+    button.secondary { background: #e5e7eb; color: #111; }
+    [hidden] { display: none !important; }
 
-    #status {
-      margin-top: 18px; font-size: 13px; color: #444;
-      display: flex; align-items: center; justify-content: center; gap: 8px;
-      min-height: 18px;
-    }
-    .dot {
-      width: 8px; height: 8px; border-radius: 50%; background: #ccc;
-      display: inline-block;
-    }
-    .dot.live { background: #22c55e; animation: pulse 1.5s infinite; }
-    .dot.error { background: #ef4444; }
+    .state { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 600; margin-bottom: 14px; }
+    .dot { width: 12px; height: 12px; border-radius: 50%; background: #9ca3af; flex: none; }
+    .dot.live { background: #16a34a; animation: pulse 1.6s infinite; }
+    .dot.warn { background: #f59e0b; }
+    .dot.error { background: #dc2626; }
     @keyframes pulse {
-      0% { box-shadow: 0 0 0 0 rgba(34,197,94,0.5); }
-      100% { box-shadow: 0 0 0 8px rgba(34,197,94,0); }
+      0% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.5); }
+      100% { box-shadow: 0 0 0 10px rgba(22, 163, 74, 0); }
     }
+    dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 14px; }
+    dt { color: #6b7280; }
+    dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+    .note { margin: 16px 0 0; font-size: 12.5px; color: #555; line-height: 1.5; }
+    .message { margin: 0 0 12px; padding: 10px 12px; border-radius: 8px; background: #fef3c7; color: #78350f; font-size: 13px; }
   </style>
 </head>
 <body>
-  <div class="card">
-    <h2>Share Device Location</h2>
-    <p class="sub">Enter a name for this device, then start sharing.<br>Keep this tab open while working.</p>
+  <main class="card">
+    <h1>Share my location</h1>
+    <p class="sub">
+      This work phone shares its GPS location with your employer's tracker, only while sharing is on.
+      You can stop at any time.
+    </p>
 
-    <input id="label" type="text" placeholder="e.g. FO - John, Router 3" />
-    <button id="startBtn">Start Sharing Location</button>
-    <div id="status"></div>
-  </div>
+    <!-- Screen 1: set up -->
+    <section id="setup">
+      <p class="message" id="setupMessage" hidden></p>
+      <label for="label">Name for this device</label>
+      <input id="label" type="text" maxlength="60" placeholder="e.g. FO Chidi" autocomplete="off" />
+      <div id="keyRow" hidden>
+        <label for="key">Access code</label>
+        <input id="key" type="password" autocomplete="off" placeholder="Given by your supervisor" />
+      </div>
+      <button id="startBtn" type="button">Start sharing</button>
+      <p class="note" id="leftover" hidden></p>
+    </section>
+
+    <!-- Screen 2: sharing -->
+    <section id="running" hidden>
+      <div class="state"><span class="dot" id="dot"></span><span id="stateText">Starting…</span></div>
+      <dl>
+        <dt>Last GPS reading</dt><dd id="lastFix">—</dd>
+        <dt>Waiting to upload</dt><dd id="pending">0 points</dd>
+        <dt>Last uploaded</dt><dd id="lastUpload">—</dd>
+      </dl>
+      <p class="note" id="hint"></p>
+      <button class="secondary" id="stopBtn" type="button">Stop sharing</button>
+    </section>
+  </main>
 
   <script>
-    const deviceId = 'device_' + Math.random().toString(36).slice(2, 8);
-    const statusEl = document.getElementById('status');
-    let watchId = null;
+    (() => {
+      'use strict';
 
-    function setStatus(text, dotClass) {
-      statusEl.innerHTML = `<span class="dot ${dotClass || ''}"></span><span>${text}</span>`;
-    }
+      // ---------- Settings: change these numbers to tune how the tracker behaves ----------
+      const CFG = Object.assign({
+        MIN_SECONDS_BETWEEN_POINTS: 15,   // never save readings closer together in time than this
+        MIN_METRES_BETWEEN_POINTS: 10,    // ...unless the phone moved at least this far
+        STILL_POINT_EVERY_SECONDS: 60,    // standing still: still save one reading this often
+        UPLOAD_EVERY_SECONDS: 10,         // how often we try to send saved readings to the server
+        PING_EVERY_SECONDS: 30,           // "I'm alive" message when there is nothing to send
+        MAX_ACCURACY_METRES: 200,         // ignore readings less accurate than this
+        BATCH_SIZE: 200,                  // readings per upload
+        MAX_QUEUE: 20000,                 // most readings kept on the phone while offline
+        REQUEST_TIMEOUT_MS: 15000,
+      }, window.__FOT_TEST_CONFIG__ || {}); // (the last line is only a hook for automated tests)
 
-    document.getElementById('startBtn').addEventListener('click', () => {
-      const label = document.getElementById('label').value || deviceId;
+      // ---------- Phone storage (localStorage survives closing the browser) ----------
+      const store = {
+        get(key) { try { return localStorage.getItem('fot_' + key); } catch { return null; } },
+        set(key, value) { try { localStorage.setItem('fot_' + key, value); return true; } catch { return false; } },
+      };
 
-      if (!navigator.geolocation) {
-        setStatus('Geolocation is not supported on this browser.', 'error');
-        return;
+      function makeId() {
+        if (crypto.randomUUID) return crypto.randomUUID();
+        return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
       }
 
-      watchId = navigator.geolocation.watchPosition(
-        (position) => {
-          const { latitude, longitude } = position.coords;
-          sendLocation(latitude, longitude, label);
-        },
-        (err) => setStatus('Location error: ' + err.message, 'error'),
-        { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
-      );
+      // The device ID is created once and kept, so every visit is the SAME device on the dashboard.
+      let deviceId = store.get('id');
+      if (!deviceId) { deviceId = makeId(); store.set('id', deviceId); }
+      const idIsSaved = store.get('id') === deviceId;
 
-      setStatus('Starting...', 'live');
-      document.getElementById('startBtn').disabled = true;
-    });
+      // Readings waiting to be uploaded. Saved to the phone on every change.
+      let queue = [];
+      try { queue = JSON.parse(store.get('queue') || '[]'); } catch { queue = []; }
+      let queueWarning = '';
+      function saveQueue() {
+        if (!store.set('queue', JSON.stringify(queue))) queueWarning = 'This browser cannot store readings offline (private mode?).';
+      }
 
-    async function sendLocation(lat, lng, label) {
-      try {
-        await fetch('/api/location', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ deviceId, lat, lng, label })
+      // ---------- Page elements ----------
+      const $ = (id) => document.getElementById(id);
+      const setupEl = $('setup'), runningEl = $('running');
+      const labelInput = $('label'), keyInput = $('key'), keyRow = $('keyRow');
+
+      // ---------- State ----------
+      let sharing = false;
+      let watchId = null, uploadTimer = null, renderTimer = null, wakeLock = null;
+      let lastRecorded = null;              // the last reading we saved
+      let lastFixAt = 0, weakAccuracy = null;
+      let lastUploadAt = 0, lastContactAt = 0;
+      let connection = 'unknown';           // 'ok' | 'offline' | 'rejected' | 'unknown'
+      let gpsError = null, flushing = false, droppedCount = 0;
+
+      // ---------- Maths ----------
+      function metresBetween(a, b) {
+        const R = 6371000, rad = Math.PI / 180;
+        const dLat = (b.lat - a.lat) * rad, dLng = (b.lng - a.lng) * rad;
+        const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2;
+        return 2 * R * Math.asin(Math.sqrt(h));
+      }
+
+      // The recording rule: save a reading if enough time has passed AND we moved,
+      // or if we've been still for a while (so a stationary phone still leaves a trace).
+      function shouldRecord(last, next) {
+        if (!last) return true;
+        const seconds = (next.t - last.t) / 1000;
+        if (seconds < 0) return false;
+        if (seconds >= CFG.STILL_POINT_EVERY_SECONDS) return true;
+        return seconds >= CFG.MIN_SECONDS_BETWEEN_POINTS && metresBetween(last, next) >= CFG.MIN_METRES_BETWEEN_POINTS;
+      }
+
+      // ---------- GPS ----------
+      function onPosition(position) {
+        const c = position.coords;
+        gpsError = null;
+        lastFixAt = position.timestamp;
+        if (c.accuracy > CFG.MAX_ACCURACY_METRES) {
+          weakAccuracy = c.accuracy; // too vague to trust: show it, but don't save it
+          render();
+          return;
+        }
+        weakAccuracy = null;
+        const point = {
+          t: position.timestamp, // when the GPS took the reading, NOT when it gets uploaded
+          lat: Math.round(c.latitude * 1e6) / 1e6,
+          lng: Math.round(c.longitude * 1e6) / 1e6,
+          acc: Math.round(c.accuracy),
+        };
+        if (shouldRecord(lastRecorded, point)) {
+          lastRecorded = point;
+          queue.push(point);
+          if (queue.length > CFG.MAX_QUEUE) queue.splice(0, queue.length - CFG.MAX_QUEUE); // drop the oldest
+          saveQueue();
+          flush(false);
+        }
+        render();
+      }
+
+      function onGeoError(error) {
+        gpsError = { code: error.code };
+        if (error.code === 1) { // permission denied
+          stopTracking(false, 'Location is blocked for this page. Allow location in your browser settings, then tap Start.');
+          return;
+        }
+        render(); // 2 = no signal, 3 = timed out: keep waiting, the phone keeps trying
+      }
+
+      // ---------- Uploading ----------
+      async function send(points) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), CFG.REQUEST_TIMEOUT_MS);
+        const headers = { 'Content-Type': 'application/json' };
+        const key = store.get('key');
+        if (key) headers['x-device-key'] = key;
+        try {
+          return await fetch('/api/locations', {
+            method: 'POST', headers, signal: controller.signal,
+            body: JSON.stringify({ deviceId, label: store.get('label') || 'Unnamed device', points }),
+          });
+        } finally { clearTimeout(timer); }
+      }
+
+      function removeFromQueue(batch) {
+        const sent = new Set(batch.map((p) => p.t));
+        queue = queue.filter((p) => !sent.has(p.t));
+        saveQueue();
+      }
+
+      // Send saved readings to the server. A reading only leaves the phone's storage
+      // after the server has confirmed it saved it.
+      async function flush(force) {
+        if (flushing) return;
+        const pingDue = Date.now() - lastContactAt >= CFG.PING_EVERY_SECONDS * 1000;
+        if (queue.length === 0 && !pingDue && !force) return;
+        flushing = true;
+        try {
+          while (true) {
+            const batch = queue.slice(0, CFG.BATCH_SIZE);
+            const response = await send(batch);
+            if (response.status === 401 || response.status === 403) { connection = 'rejected'; break; }
+            if (response.status === 400 && batch.length > 0) {
+              // The server will never accept this batch; drop it so the queue can't get stuck.
+              droppedCount += batch.length;
+              removeFromQueue(batch);
+              continue;
+            }
+            if (!response.ok) { connection = 'offline'; break; }
+            removeFromQueue(batch);
+            connection = 'ok';
+            lastContactAt = Date.now();
+            if (batch.length > 0) lastUploadAt = lastContactAt;
+            if (queue.length === 0) break;
+          }
+        } catch {
+          connection = 'offline'; // no internet, or the server took too long
+        } finally {
+          flushing = false;
+          render();
+        }
+      }
+
+      // ---------- Keep the screen on (phones pause GPS in web pages when the screen locks) ----------
+      async function keepAwake() {
+        try {
+          if (sharing && 'wakeLock' in navigator && !wakeLock) {
+            wakeLock = await navigator.wakeLock.request('screen');
+            wakeLock.addEventListener('release', () => { wakeLock = null; });
+          }
+        } catch { wakeLock = null; }
+        render();
+      }
+
+      // ---------- Screens ----------
+      const plural = (n) => `${n} point${n === 1 ? '' : 's'}`;
+      const clock = (ms) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+      function showSetup(message) {
+        runningEl.hidden = true;
+        setupEl.hidden = false;
+        $('setupMessage').hidden = !message;
+        $('setupMessage').textContent = message || '';
+        $('leftover').hidden = queue.length === 0;
+        $('leftover').textContent = `${plural(queue.length)} saved on this phone will upload next time you start sharing with a connection.`;
+      }
+
+      function describeState() {
+        if (gpsError && gpsError.code === 2 && !lastFixAt) return { cls: 'warn', text: 'No GPS signal yet…' };
+        if (connection === 'rejected') return { cls: 'error', text: 'Access code not accepted' };
+        if (connection === 'offline') return { cls: 'warn', text: `Offline — ${plural(queue.length)} saved on this phone` };
+        if (!lastFixAt || Date.now() - lastFixAt > 90000) {
+          return { cls: 'warn', text: weakAccuracy ? 'Weak GPS signal…' : 'Waiting for GPS…' };
+        }
+        return { cls: 'live', text: 'Live — sharing location' };
+      }
+
+      function render() {
+        if (!sharing) return;
+        const state = describeState();
+        $('dot').className = 'dot ' + state.cls;
+        $('stateText').textContent = state.text;
+        $('lastFix').textContent = lastFixAt
+          ? clock(lastFixAt) + (weakAccuracy ? ` (weak, ±${Math.round(weakAccuracy)} m)` : '')
+          : '—';
+        $('pending').textContent = plural(queue.length);
+        $('lastUpload').textContent = lastUploadAt ? clock(lastUploadAt) : '—';
+
+        const parts = ['Keep this page open.'];
+        parts.push(wakeLock
+          ? 'The screen is kept on so GPS keeps running.'
+          : 'Do not lock the phone: this page cannot track while the screen is off.');
+        parts.push('Readings are saved on this phone first, so a lost signal does not lose them.');
+        if (connection === 'rejected') parts.push('Tap Stop, then enter the correct access code.');
+        if (droppedCount) parts.push(`${plural(droppedCount)} were rejected by the server.`);
+        if (!idIsSaved) parts.push('Warning: this browser cannot remember this device between visits.');
+        if (queueWarning) parts.push(queueWarning);
+        $('hint').textContent = parts.join(' ');
+      }
+
+      // ---------- Start / stop ----------
+      function startTracking() {
+        if (!navigator.geolocation) { showSetup('This browser cannot share location.'); return; }
+        sharing = true;
+        store.set('sharing', '1');
+        lastRecorded = null; gpsError = null; connection = 'unknown';
+        watchId = navigator.geolocation.watchPosition(onPosition, onGeoError, {
+          enableHighAccuracy: true, maximumAge: 0, timeout: 30000,
         });
-        setStatus(`Live — last sent ${new Date().toLocaleTimeString()}`, 'live');
-      } catch (err) {
-        setStatus('Failed to send: ' + err.message, 'error');
+        uploadTimer = setInterval(() => flush(false), CFG.UPLOAD_EVERY_SECONDS * 1000);
+        renderTimer = setInterval(render, 1000);
+        setupEl.hidden = true;
+        runningEl.hidden = false;
+        keepAwake();
+        render();
+        flush(true);
       }
-    }
+
+      async function stopTracking(userChoice, message) {
+        sharing = false;
+        store.set('sharing', '0');
+        if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+        clearInterval(uploadTimer); clearInterval(renderTimer);
+        try { if (wakeLock) await wakeLock.release(); } catch { /* ignore */ }
+        wakeLock = null;
+        if (userChoice) await flush(true); // one last try to upload what is waiting
+        showSetup(message);
+      }
+
+      $('startBtn').addEventListener('click', () => {
+        const label = labelInput.value.trim();
+        if (!label) { showSetup('Please enter a name for this device.'); return; }
+        if (!keyRow.hidden && !keyInput.value.trim()) { showSetup('Please enter the access code.'); return; }
+        store.set('label', label);
+        if (keyInput.value.trim()) store.set('key', keyInput.value.trim());
+        startTracking();
+      });
+      $('stopBtn').addEventListener('click', () => stopTracking(true));
+
+      window.addEventListener('online', () => flush(true));
+      window.addEventListener('offline', () => { connection = 'offline'; render(); });
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && sharing) { keepAwake(); flush(true); }
+      });
+
+      // ---------- On page load ----------
+      labelInput.value = store.get('label') || '';
+      keyInput.value = store.get('key') || '';
+      if (store.get('key')) keyRow.hidden = false;
+      fetch('/api/health').then((r) => r.json()).then((h) => { if (h.deviceKeyRequired) keyRow.hidden = false; }).catch(() => {});
+
+      // If sharing was on when the page was last open and the browser already has permission,
+      // carry on automatically: no need to tap Start or allow location again.
+      (async () => {
+        if (store.get('sharing') === '1' && store.get('label')) {
+          try {
+            const permission = await navigator.permissions.query({ name: 'geolocation' });
+            if (permission.state === 'granted') { startTracking(); return; }
+          } catch { /* older browsers: fall through to the button */ }
+          showSetup('Sharing was on. Tap Start to continue.');
+        } else {
+          showSetup('');
+        }
+      })();
+    })();
   </script>
 </body>
 </html>
