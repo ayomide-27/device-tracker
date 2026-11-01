@@ -1,42 +1,63 @@
-# FO Device Tracker
+# FO Tracker
 
-Consent-based tracker for employer-issued field-officer (FO) phones.
-
-- **Phone page** `/device.html` — the FO opens it, enters a name, taps *Start sharing*.
-- **Dashboard** `/` — you open it, sign in with the dashboard password, see every device, its online/offline status, and saved routes by date.
+A consent-based tracker for field officers (FOs). An FO's work phone shares its GPS location from a web page; a supervisor's dashboard shows live positions, saved routes, weekly site assignments and check-in verification.
 
 ## How it works
 
-```
-FO phone (GPS) -> saved on the phone first -> uploaded to server -> database -> dashboard
-```
+- **Phone page** (`/device`): the FO taps *Start sharing*. GPS points and check-ins are saved on the phone first (IndexedDB), then uploaded with their original GPS timestamps, so nothing is lost when the signal drops. The page also opens with no internet after the first visit.
+- **Check-in**: the FO taps *Check in* next to a site (or *another place*). The phone waits for a precise GPS fix, shows the distance from the site, takes an optional photo, and saves it.
+- **Dashboard** (`/`, password protected): *Live* (where phones are), *Day* (route + check-ins for a day, flags, photos, CSV), *Plan* (weekly sites, visited / not-visited board, paste-import of sites, CSV).
+- **Verification**: a check-in is *verified* inside the site's radius, *off site* outside it, *unplanned* for "another place". Flags (weak GPS, no tracking nearby, impossible travel, phone clock ahead) mark check-ins worth a second look. Numbers live in `src/rules.js`.
 
-- A GPS reading is saved on the phone **before** any upload. If there is no internet, readings wait on the phone and upload when the connection returns, with their **original timestamps**, so the route has no hole.
-- A reading is only deleted from the phone after the server confirms it stored it.
-- Recording rule (in `public/device.html`, top of the script): one reading every 15 s while moving 10 m or more; one every 60 s while standing still.
-- A device is **online** if the server heard from it in the last 2 minutes, otherwise **offline** (grey dot, last position kept).
-- History is kept 90 days (`RETENTION_DAYS`), then deleted automatically.
-
-## Run on your laptop
+## Run it
 
 ```
 npm install
-npm start
+cp .env.example .env     # then fill in DATABASE_URL (a Postgres database; Neon's free tier works)
+npm run dev
 ```
 
-Open http://localhost:3000. Chrome allows GPS on `localhost`. History is saved in `./data` (git-ignored).
+Open `http://localhost:3000/device` and `http://localhost:3000/`.
 
 ## Settings (environment variables)
 
-| Name | What it does |
+| Name | Meaning |
 |---|---|
-| `DASHBOARD_PASSWORD` | **Set this.** Protects the dashboard and all location data. Username can be anything. |
-| `DEVICE_KEY` | Optional access code the phones must enter. Stops strangers sending fake locations. |
-| `DATABASE_URL` | Postgres address. Without it, history is TEMPORARY on Render (erased on every restart). |
-| `RETENTION_DAYS` | How long history is kept. Default 90. |
+| `DATABASE_URL` | Postgres connection string (required) |
+| `DASHBOARD_PASSWORD` | Password for the dashboard and every API that returns locations |
+| `DEVICE_KEY` | Optional access code the phones must enter |
+| `GOOGLE_MAPS_API_KEY` | Enables Google Maps. Empty = OpenStreetMap. Restrict the key to your site's address and the Maps JavaScript API in Google Cloud Console |
+| `GOOGLE_MAP_ID` | Google map style id (default `DEMO_MAP_ID`) |
+| `RETENTION_DAYS` | How long data is kept (default 90) |
+| `TIMEZONE` | Where "today" and "this week" are counted (default `Africa/Lagos`) |
 
-## Limits (write these in your report)
+## Code layout
 
-- A website cannot track in the background. The FO's phone must keep the page open with the screen on. The page requests a screen wake lock to help.
-- Browsers cannot read IMEI or a SIM number. Tracking a phone that was never set up, or that is switched off, needs enterprise device-management software.
-- GPS accuracy depends on the phone and sky view; indoors it can be tens of metres off.
+```
+server.js            starts everything
+src/config.js        settings
+src/rules.js         business numbers (radius, accuracy, speed limits...)
+src/db/              connection pool, migrations (numbered .sql files, run once each)
+src/domain/          pure functions: validation, check-in judging, site-list parsing
+src/stores/          SQL, one file per table group
+src/services/        what happens on an upload / assignment / review (uses stores + domain)
+src/http/            routes, error handling
+public/              the phone page (open to anyone) and shared files
+private/             the dashboard (served only after the password)
+test/                unit + API tests; test/e2e = real-browser tests
+```
+
+Changing the database: add a new numbered file in `src/db/migrations/`. Never edit one that has already been deployed.
+
+## Tests
+
+```
+npm test                                    # unit + API tests (needs TEST_DATABASE_URL, a database with "test" in its name; it is wiped)
+PLAYWRIGHT_PATH=... npm run test:e2e        # browser tests (phone + dashboard)
+```
+
+## Limits to know
+
+- A web page cannot track in the background: the phone page must stay open with the screen on.
+- Browsers cannot read a phone's IMEI or SIM number.
+- Free hosting sleeps after 15 minutes without traffic; the first request after that is slow.
