@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FO Tracker: supervisor dashboard</title>
+  <link rel="stylesheet" href="/dash/css/dashboard.css" />
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <header class="brand">
+        <h1>FO Tracker</h1>
+        <p class="map-note" id="mapNote" hidden></p>
+      </header>
+
+      <nav class="tabs" role="tablist">
+        <button class="tab active" data-tab="live" role="tab">Live</button>
+        <button class="tab" data-tab="day" role="tab">Day</button>
+        <button class="tab" data-tab="plan" role="tab">Plan</button>
+      </nav>
+
+      <!-- LIVE -->
+      <section class="panel" id="panel-live">
+        <p class="hint">Where each field officer's phone is right now. Click one to follow it.</p>
+        <ul class="rows" id="deviceList"></ul>
+        <p class="empty" id="deviceEmpty" hidden>No phones yet. Open <strong>/device</strong> on an FO's phone and tap Start sharing.</p>
+      </section>
+
+      <!-- DAY -->
+      <section class="panel" id="panel-day" hidden>
+        <div class="field">
+          <label for="dayDevice">Field officer</label>
+          <select id="dayDevice"></select>
+        </div>
+        <div class="field">
+          <label for="dayDate">Day</label>
+          <div class="date-row">
+            <button type="button" class="icon" id="dayPrev" aria-label="Previous day">◀</button>
+            <input type="date" id="dayDate" />
+            <button type="button" class="icon" id="dayNext" aria-label="Next day">▶</button>
+            <button type="button" class="ghost" id="dayToday">Today</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="dayRange">Show</label>
+          <select id="dayRange">
+            <option value="1">That day</option>
+            <option value="3">3 days from then</option>
+            <option value="7">7 days from then</option>
+          </select>
+        </div>
+        <p class="summary" id="daySummary"></p>
+        <ul class="rows" id="visitList"></ul>
+        <p class="empty" id="visitEmpty" hidden>No check-ins in this period.</p>
+        <a class="button-link" id="visitsCsv" href="#">Download check-ins (CSV)</a>
+      </section>
+
+      <!-- PLAN -->
+      <section class="panel" id="panel-plan" hidden>
+        <div class="date-row week-row">
+          <button type="button" class="icon" id="weekPrev" aria-label="Previous week">◀</button>
+          <strong id="weekLabel"></strong>
+          <button type="button" class="icon" id="weekNext" aria-label="Next week">▶</button>
+          <button type="button" class="ghost" id="weekNow">This week</button>
+        </div>
+        <div class="field">
+          <label for="planDevice">Show</label>
+          <select id="planDevice"></select>
+        </div>
+        <div class="chips" id="boardSummary"></div>
+        <ul class="rows" id="boardList"></ul>
+        <p class="empty" id="boardEmpty" hidden>No sites assigned for this week yet. Add some below.</p>
+        <a class="button-link" id="boardCsv" href="#">Download weekly report (CSV)</a>
+
+        <details class="box" id="assignBox" open>
+          <summary>Assign sites for this week</summary>
+          <p class="hint">Paste the list from WhatsApp, one site per line: <code>Name, latitude, longitude</code> or <code>Name, long Google Maps link</code>. Add a radius in metres at the end if the default (100) is not right.</p>
+          <textarea id="importText" rows="6" placeholder="Wuse Market, 9.0765, 7.3986&#10;Garki Hospital, 9.03, 7.49, 150&#10;Maitama Branch, https://www.google.com/maps/place/.../@9.0833,7.4833,17z"></textarea>
+          <fieldset class="targets">
+            <legend>Give these sites to</legend>
+            <div id="targetList"></div>
+          </fieldset>
+          <button type="button" id="importBtn">Add and assign</button>
+          <p class="result" id="importResult" role="status"></p>
+          <ul class="errors" id="importErrors"></ul>
+
+          <div class="divider">or place one on the map</div>
+          <div class="field"><label for="pinName">Site name</label><input type="text" id="pinName" maxlength="80" /></div>
+          <button type="button" class="secondary" id="pinBtn">Click the map to place it</button>
+        </details>
+
+        <details class="box" id="libraryBox">
+          <summary>All sites</summary>
+          <ul class="rows" id="libraryList"></ul>
+          <p class="empty" id="libraryEmpty" hidden>No sites yet.</p>
+        </details>
+      </section>
+
+      <p class="error" id="errorBar" role="alert" hidden></p>
+    </aside>
+
+    <main class="map-wrap">
+      <div id="map"></div>
+      <div class="layers" id="layers">
+        <label><input type="checkbox" data-layer="devices" checked /><span class="swatch device"></span> Phones</label>
+        <label><input type="checkbox" data-layer="route" checked /><span class="swatch route"></span> Route</label>
+        <label><input type="checkbox" data-layer="visits" checked /><span class="swatch visit"></span> Check-ins</label>
+        <label><input type="checkbox" data-layer="planned" /><span class="swatch site"></span> Planned sites</label>
+        <button type="button" class="ghost" id="fitBtn" title="Zoom to everything shown">Zoom to fit</button>
+      </div>
+      <div class="info" id="infoCard" hidden></div>
+      <div class="banner" id="pickBanner" hidden>Click the map where the site is. <button type="button" id="pickCancel">Cancel</button></div>
+    </main>
+  </div>
+
+  <div class="modal" id="photoModal" hidden>
+    <div class="modal-body">
+      <button type="button" class="icon close" id="photoClose" aria-label="Close">✕</button>
+      <p id="photoCaption" class="caption"></p>
+      <img id="photoImg" alt="Check-in photo" />
+    </div>
+  </div>
+
+  <script type="module" src="/dash/js/main.js"></script>
+</body>
+</html>
